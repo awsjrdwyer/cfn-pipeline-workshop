@@ -1,0 +1,268 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters: 
+  EnvironmentName:
+    Description: A custom alphanumeric name for this Environment
+    Type: String
+    MinLength: 1
+    MaxLength: 20
+    ConstraintDescription: Must be alphanumeric with no spaces
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  WebInstanceType:
+    Description: Instance Type for Web/App Servers
+    Type: String
+    AllowedValues:
+      - "t3.small"
+      - "t3.medium"
+      - "t3.large"
+      - "t3.xlarge"
+      - "m5.large"
+      - "m5.xlarge"
+      - "c5.large"
+      - "c5.xlarge"
+      - "r5.large"
+      - "r5.xlarge"
+  DbInstanceType:
+    Description: Instance Type for Database Instance
+    Type: String
+    AllowedValues:
+      - "db.t3.small"
+      - "db.t3.medium"
+      - "db.t3.large"
+      - "db.t3.xlarge"
+      - "db.m5.large"
+      - "db.m5.xlarge"
+      - "db.r5.large"
+      - "db.r5.xlarge"
+  DbVersion:
+    Description: MySQL Version for Database Instance
+    Type: String
+  DbUser:
+    Description: Username for Database Instance
+    Type: String
+  DbPassword:
+    Description: Password for Database Instance
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    MaxLength: 41
+    AllowedPattern: ^[a-zA-Z0-9]*$
+  VPCId:
+    Type: "AWS::EC2::VPC::Id"
+  PublicSubnet1:
+    Type: "AWS::EC2::Subnet::Id"
+  PublicSubnet2:
+    Type: "AWS::EC2::Subnet::Id"
+  AppSubnet1:
+    Type: "AWS::EC2::Subnet::Id"
+  AppSubnet2:
+    Type: "AWS::EC2::Subnet::Id"
+  DataSubnet1:
+    Type: "AWS::EC2::Subnet::Id"
+  DataSubnet2:
+    Type: "AWS::EC2::Subnet::Id"
+  KeyPair:
+    Type: "AWS::EC2::KeyPair::KeyName"
+  AMIId:
+    Type: "AWS::EC2::Image::Id"
+
+Resources: 
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${EnvironmentName}-ALB'
+      Type: application
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      HealthCheckPort: '80'
+      HealthCheckProtocol: HTTP
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VPCId
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref LaunchConfig
+      MaxSize: 4
+      MinSize: 2
+      DesiredCapacity: 2
+      VPCZoneIdentifier: 
+        - !Ref AppSubnet1
+        - !Ref AppSubnet2
+      TargetGroupARNs:
+        - !Ref 'ALBTargetGroup'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-Instance'
+          PropagateAtLaunch: True
+        - Key: Environment
+          Value: !Ref EnvironmentName
+          PropagateAtLaunch: True
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /var/www/http/index.html:
+              content: !Join
+                - ''
+                - - '<html>'
+                  - "\n"
+                  - '<body>'
+                  - "\n"
+                  - '<h1>Hello World!</h1>'
+                  - "\n"
+                  - '</body>'
+                  - "\n"
+                  - '</html>'
+                  - "\n"
+              mode: '000644'
+              owner: root
+              group: root
+          commands:
+            01_install_httpd:
+              command: sudo yum install -y httpd
+            02_restart_httpd:
+              command: sudo service httpd restart
+    Properties:
+      LaunchConfigurationName: !Sub '${EnvironmentName}-LaunchConfig'
+      AssociatePublicIpAddress: false
+      ImageId: !Ref AMIId
+      IamInstanceProfile: !Ref InstanceProfile
+      InstanceType: !Ref WebInstanceType
+      KeyName: !Ref KeyPair
+      SecurityGroups:
+        - !Ref WebServerSecurityGroup
+      UserData: !Base64
+        Fn::Join:
+          - ''
+          - - "#!/bin/bash\n"
+            - 'sudo /opt/aws/bin/cfn-init -v '
+            - '--stack '
+            - !Ref 'AWS::StackName'
+            - ' '
+            - '--resource LaunchConfig '
+            - '--region '
+            - !Ref 'AWS::Region'
+            - "\n"
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AWSCodeCommitReadOnly'
+      Policies:
+        - PolicyName: SSM-Permissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - ssm:UpdateInstanceInformation
+                  - ssmmessages:CreateControlChannel
+                  - ssmmessages:CreateDataChannel
+                  - ssmmessages:OpenControlChannel
+                  - ssmmessages:OpenDataChannel
+                  - s3:GetEncryptionConfiguration
+                Effect: Allow
+                Resource: '*'
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceRole
+  WebServerTargetTrackingScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ASG
+      Cooldown: '60'
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 75.0
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to RDS Port
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !GetAtt WebServerSecurityGroup.GroupId
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: App Server Security Group
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 100
+      DBInstanceClass: !Ref DbInstanceType
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-db'
+      VPCSecurityGroups: 
+        - !Ref RDSSecurityGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      Engine: mysql
+      EngineVersion: !Ref DbVersion
+      MasterUsername: !Ref DbUser
+      MasterUserPassword: !Ref DbPassword
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-DB'
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for RDS Database
+      SubnetIds: 
+        - !Ref DataSubnet1
+        - !Ref DataSubnet2
+        
+Outputs:
+  ALBURL:
+      Description: "URL endpoint of ALB"
+      Value:
+        Fn::GetAtt: [ ALB, DNSName ]

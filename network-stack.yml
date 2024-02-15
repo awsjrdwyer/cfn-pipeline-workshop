@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters: 
+  VpcIpSpace:
+    Description: IP range for VPC
+    Type: String
+  PublicSubnetIpBlock1:
+    Description: IP ranges for Public Subnets
+    Type: String
+  PublicSubnetIpBlock2:
+    Description: IP ranges for Public Subnets
+    Type: String
+  AppSubnetIpBlock1:
+    Description: IP ranges for App Subnets
+    Type: String
+  AppSubnetIpBlock2:
+    Description: IP ranges for App Subnets
+    Type: String
+  DataSubnetIpBlock1:
+    Description: IP ranges for Data Subnets
+    Type: String
+  DataSubnetIpBlock2:
+    Description: IP ranges for Data Subnets
+    Type: String
+  VpcAz1:
+    Description: Availability Zone for AZ
+    Type: AWS::EC2::AvailabilityZone::Name
+  VpcAz2:
+    Description: Availability Zone for AZ
+    Type: AWS::EC2::AvailabilityZone::Name
+
+Resources: 
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcIpSpace
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-VPC'
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref VpcAz1
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetIpBlock1
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicSubnet1'
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref VpcAz2
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetIpBlock2
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicSubnet2'
+  AppSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref VpcAz1
+      VpcId: !Ref VPC
+      CidrBlock: !Ref AppSubnetIpBlock1
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AppSubnet1'
+  AppSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref VpcAz2
+      VpcId: !Ref VPC
+      CidrBlock: !Ref AppSubnetIpBlock2
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AppSubnet2'
+  DataSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref VpcAz1
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DataSubnetIpBlock1
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DataSubnet1'
+  DataSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref VpcAz2
+      VpcId: !Ref VPC
+      CidrBlock: !Ref DataSubnetIpBlock2
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DataSubnet2'
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-IGW'
+  IGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+  EIPNatGatewayA:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  EIPNatGatewayB:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNatGatewayA.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT-Gateway-A'
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPNatGatewayB.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT-Gateway-B'
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicRouteTable'
+  PublicRouteTableRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  PublicSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateRouteTableA'
+  PrivateRouteTableARoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayA
+  AppSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnet1
+      RouteTableId: !Ref PrivateRouteTableA
+  DataSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DataSubnet1
+      RouteTableId: !Ref PrivateRouteTableA
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateRouteTableA'
+  PrivateRouteTableBRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayB
+  AppSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnet2
+      RouteTableId: !Ref PrivateRouteTableB
+  DataSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DataSubnet2
+      RouteTableId: !Ref PrivateRouteTableB
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
+  PublicSubnet1Id:
+    Description: Public Subnet 1 ID
+    Value: !Ref PublicSubnet1
+  PublicSubnet2Id:
+    Description: Public Subnet 2 ID
+    Value: !Ref PublicSubnet2
+  AppSubnet1Id:
+    Description: App Subnet 1 ID
+    Value: !Ref AppSubnet1
+  AppSubnet2Id:
+    Description: App Subnet 2 ID
+    Value: !Ref AppSubnet2
+  DataSubnet1Id:
+    Description: Data Subnet 1 ID
+    Value: !Ref DataSubnet1
+  DataSubnet2Id:
+    Description: Data Subnet 2 ID
+    Value: !Ref DataSubnet2

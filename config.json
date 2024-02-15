@@ -1,0 +1,14 @@
+{
+  "Parameters" : {
+    "TemplatePath": "PUT_BUCKET_NAME_HERE",
+    "VpcIpSpace": "10.10.0.0/16",
+    "PublicSubnetIpBlock1": "10.10.0.0/24",
+    "PublicSubnetIpBlock2": "10.10.1.0/24",
+    "AppSubnetIpBlock1": "10.10.2.0/24", 
+    "AppSubnetIpBlock2": "10.10.3.0/24",
+    "DataSubnetIpBlock1": "10.10.4.0/24", 
+    "DataSubnetIpBlock2": "10.10.5.0/24",
+    "VpcAz1": "us-east-1a",
+    "VpcAz2": "us-east-1b"
+  }
+}

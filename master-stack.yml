@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  TemplatePath:
+    Type: String
+    Description: S3Bucket Path where the templates are stored
+  VpcIpSpace:
+    Description: IP range for VPC
+    Type: String
+  PublicSubnetIpBlock1:
+    Description: IP ranges for Public Subnets
+    Type: String
+  PublicSubnetIpBlock2:
+    Description: IP ranges for Public Subnets
+    Type: String
+  AppSubnetIpBlock1:
+    Description: IP ranges for App Subnets
+    Type: String
+  AppSubnetIpBlock2:
+    Description: IP ranges for App Subnets
+    Type: String
+  DataSubnetIpBlock1:
+    Description: IP ranges for Data Subnets
+    Type: String
+  DataSubnetIpBlock2:
+    Description: IP ranges for Data Subnets
+    Type: String
+  VpcAz1:
+    Description: Availability Zone for AZ
+    Type: AWS::EC2::AvailabilityZone::Name
+  VpcAz2:
+    Description: Availability Zone for AZ
+    Type: AWS::EC2::AvailabilityZone::Name
+
+Resources:
+  NetworkStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL:
+        Fn::Sub: "https://s3.amazonaws.com/${TemplatePath}/network-stack.yml"
+      Parameters:
+        VpcIpSpace:
+          Ref: VpcIpSpace
+        PublicSubnetIpBlock1:
+          Ref: PublicSubnetIpBlock1
+        PublicSubnetIpBlock2:
+          Ref: PublicSubnetIpBlock2
+        AppSubnetIpBlock1:
+          Ref: AppSubnetIpBlock1
+        AppSubnetIpBlock2:
+          Ref: AppSubnetIpBlock2
+        DataSubnetIpBlock1:
+          Ref: DataSubnetIpBlock1
+        DataSubnetIpBlock2:
+          Ref: DataSubnetIpBlock2
+        VpcAz1:
+          Ref: VpcAz1
+        VpcAz2:
+          Ref: VpcAz2
+      Tags:
+        - Key: Name
+          Value: NetworkStack
+          
